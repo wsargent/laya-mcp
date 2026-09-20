@@ -11,6 +11,14 @@
 #   LAYA_GUARD_URL       code-mode daemon base (default http://127.0.0.1:8743)
 #   LAYA_CLI_BIN         laya-cli path (default this repo's venv binary)
 #   LAYA_GUARD_THRESHOLD reject when jailbreak/injection >= this (default 0.9)
+#   LAYA_GUARD_ENFORCE   1 to reject; default 0 = log-only (accept, but log
+#                       scores). Log-only is the default because a live
+#                       session showed a false positive on a benign operator
+#                       prompt ("Use the shell tool ... Do nothing else"
+#                       scored jailbreak 0.97 / injection 1.0) — injection
+#                       detectors flag instruction-override language that
+#                       operators legitimately use. Tune on your traffic,
+#                       then set LAYA_GUARD_ENFORCE=1.
 #   LAYA_GUARD_LOG       decision log (default /tmp/laya-prompt-guard.log)
 #
 # Register in .polytoken/hooks.json:
@@ -25,6 +33,7 @@ set -u
 URL="${LAYA_GUARD_URL:-http://127.0.0.1:8743}"
 CLI="${LAYA_CLI_BIN:-/Users/wsargent/work/laya-mcp/.venv/bin/laya-cli}"
 THRESHOLD="${LAYA_GUARD_THRESHOLD:-0.9}"
+ENFORCE="${LAYA_GUARD_ENFORCE:-0}"
 LOG="${LAYA_GUARD_LOG:-/tmp/laya-prompt-guard.log}"
 
 allow() { echo '{"outcome":"accept"}'; exit 0; }
@@ -56,9 +65,9 @@ DAN="$(printf '%s' "$RESULT" | jq -r '.dangerous_request // "unknown"')"
 [ -n "$JB" ] || { log_json "unexpected-response" '"threshold":'"$THRESHOLD"; allow; }
 
 log_json "decision" \
-  '"jailbreak":'"$JB"',"injection":'"$INJ"',"severity":'"$SEV"',"dangerous_request":'"$DAN"',"threshold":'"$THRESHOLD"
+  '"jailbreak":'"$JB"',"injection":'"$INJ"',"severity":'"$SEV"',"dangerous_request":'"$DAN"',"threshold":'"$THRESHOLD"',"enforce":'"$ENFORCE"
 
-if awk -v jb="$JB" -v inj="$INJ" -v t="$THRESHOLD" 'BEGIN { exit !(jb >= t || inj >= t) }'; then
+if [ "$ENFORCE" = "1" ] && awk -v jb="$JB" -v inj="$INJ" -v t="$THRESHOLD" 'BEGIN { exit !(jb >= t || inj >= t) }'; then
   jq -n --arg r "laya prompt guard: jailbreak=$JB injection=$INJ >= $THRESHOLD (severity=$SEV, dangerous_request=$DAN)" \
     '{outcome: "reject", reason: $r}'
   exit 0

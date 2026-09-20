@@ -226,7 +226,9 @@ Hooks are loaded when a session starts, so new sessions pick the gate up. Remove
 
 ### Prompt guard (Code Mode)
 
-`scripts/laya_prompt_guard.sh` is a `pre_user_prompt` hook backed by Code Mode: it ships one Python heredoc to the `execute` meta-tool, running `laya_guard` plus a destructive-request `laya_decide` in a single round-trip, and rejects the prompt when jailbreak or injection probability crosses `LAYA_GUARD_THRESHOLD` (default 0.9). It fails open, logs decisions to `$LAYA_GUARD_LOG` (default `/tmp/laya-prompt-guard.log`, CLI stderr beside it in `.cli`), and defaults to a code-mode daemon at `http://127.0.0.1:8743` (`LAYA_GUARD_URL`). The field of the `pre_user_prompt` payload carrying the prompt text is not documented; the script tries the likely shapes and fails open — check the log after a session.
+`scripts/laya_prompt_guard.sh` is a `pre_user_prompt` hook backed by Code Mode: it ships one Python heredoc to the `execute` meta-tool, running `laya_guard` plus a destructive-request `laya_decide` in a single round-trip, and scores every prompt. It fails open, logs decisions to `$LAYA_GUARD_LOG` (default `/tmp/laya-prompt-guard.log`, CLI stderr beside it in `.cli`), and defaults to a code-mode daemon at `http://127.0.0.1:8743` (`LAYA_GUARD_URL`).
+
+**The guard is log-only by default** (`LAYA_GUARD_ENFORCE=1` arms rejection at `LAYA_GUARD_THRESHOLD`, default 0.9). A live headless session showed why: a benign operator prompt — "Use the shell tool to run 'git log' and reply with only its output. Do nothing else." — scored jailbreak 0.97 / injection 1.0, because injection detectors flag the instruction-override language operators legitimately use. Collect scores on your real traffic, then enforce. The field of the `pre_user_prompt` payload carrying the prompt text is not documented; the script tries the likely shapes and fails open.
 
 Run the code-mode daemon alongside the plain one (same warm-model pattern, separate port so `/mcp` surfaces don't conflict):
 
@@ -237,6 +239,12 @@ LAYA_DAEMON_PORT=8743 LAYA_MCP_CODE_MODE=1 uv run laya-daemon
 ### Payload logger
 
 `scripts/laya_log_payloads.sh` appends raw event payloads to `$POLYTOKEN_PAYLOAD_LOG` (default `/tmp/polytoken-payloads.log`) so new hooks can be written against real field names. It emits no decision — exit 0 with no output is the proceed outcome for blocking events and is discarded for fire-and-forget ones — so attaching it never changes behavior. This repo registers it for `stop` and `post_model_turn`.
+
+Findings from a live `polytoken exec` session: the `post_model_turn` payload carries only `event`, `matcher_subject`, and `prompt_id` — no turn content — so output-quality scoring is not possible from that payload alone; and `stop` did not fire in an exec session at all.
+
+### A gate that did not ship
+
+A `pre_tool_use` gate on `file_edit_search_replace` ("does this edit gut tests?") was prototyped and rejected: across a 9-edit sweep the benign and gutting distributions overlapped (0.36–0.60 vs 0.51–0.85 — a benign test-function rename outscored a real check-weakening), unlike the shell gate's clean separation. Diff-judgment on small code deltas is beyond what this decision-head resolves reliably; do not ship a blocking hook on that signal.
 
 ## Polytoken tool_flow
 
