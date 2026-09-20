@@ -694,6 +694,7 @@ name = "laya-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "beartype" },
     { name = "click" },
     { name = "fastmcp", extra = ["code-mode"] },
     { name = "httpx" },
@@ -708,6 +709,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beartype", specifier = ">=0.22.9" },
     { name = "click", specifier = ">=8.1" },
     { name = "fastmcp", extras = ["code-mode"], specifier = ">=4.0.5" },
     { name = "httpx", specifier = ">=0.27" },
