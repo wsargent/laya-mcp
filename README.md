@@ -127,7 +127,7 @@ for message in messages:
 return out
 ```
 
-`call_tool` returns each tool's result data directly. `LAYA_CODE_MODE_MAX_CALLS` caps the number of `call_tool()` invocations per execution (default 50); the snippet runs in the built-in Monty sandbox (30 seconds, 100 MB, recursion 1000 by default).
+`call_tool` returns each tool's result data directly. `LAYA_CODE_MODE_MAX_CALLS` caps the number of `call_tool()` invocations per execution (default 50); the snippet runs in the built-in Monty sandbox (30 seconds and 100 MB by default; Monty's standard recursion limit applies).
 
 `laya-cli exec` drives the `execute` meta-tool from the shell — a filename argument, or a heredoc on stdin — and with `--stdio` it spawns the server with Code Mode enabled automatically.
 
@@ -147,7 +147,7 @@ The server reads these variables when the module is imported (daemon forwarding 
 | `LAYA_MCP_CODE_MODE` | off | `1` enables the Code Mode transform: `laya_*` tools are replaced by `search` / `get_schema` / `execute` meta-tools |
 | `LAYA_CODE_MODE_MAX_CALLS` | `50` | Cap on `call_tool()` invocations per Code Mode execution |
 
-The agent is loaded on the first inference call, not at startup. Errors from model loading or invalid configuration therefore surface on first inference.
+In the stdio server without daemon forwarding, the agent is loaded on the first inference call, not at startup, so errors from model loading or invalid configuration surface on first inference; the daemon instead loads eagerly at startup (see [Daemon](#daemon)).
 
 ## Client registration
 
@@ -250,7 +250,7 @@ A `pre_tool_use` gate on `file_edit_search_replace` ("does this edit gut tests?"
 
 Polytoken's `tool_flow` tool drives laya directly from agent-side scripts: list the MCP tools by registry name in the flow's `tools` array (for example `mcp__laya__laya_decide`) and call them as ordinary functions. Results arrive as parsed dicts, with scores under `["answers"]`. Two patterns pay off:
 
-**Fan-out** — N classifications in one tool call instead of N round-trips (this is the sweep that tuned the shell gate's threshold):
+**Fan-out** — N classifications in one tool call instead of N round-trips (a shortened spec; the shell gate's own threshold-tuned spec lives in `scripts/laya_shell_gate.sh`):
 
 ```python
 QUESTIONS = {"destructive": {"type": "noul",

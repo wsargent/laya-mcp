@@ -3,9 +3,11 @@
 #
 # Ships one Python heredoc to the code-mode daemon's `execute` meta-tool:
 # a laya_guard call plus a destructive-request laya_decide call in a single
-# round-trip. Rejects the prompt when jailbreak or prompt_injection
-# probability crosses the threshold; everything else is accepted. Fails OPEN:
-# daemon down, exec failure, or unknown payload shape means accept.
+# round-trip, and logs the decision. Rejection is opt-in: with
+# LAYA_GUARD_ENFORCE=1 the prompt is rejected when jailbreak or
+# prompt_injection probability crosses the threshold; everything else is
+# accepted. Fails OPEN: daemon down, exec failure, or unknown payload shape
+# means accept.
 #
 # Environment:
 #   LAYA_GUARD_URL       code-mode daemon base (default http://127.0.0.1:8743)
