@@ -263,7 +263,7 @@ def exec_code(ctx: click.Context, code_file: str | None) -> None:
     if code_file in (None, "-"):
         if _stdin_is_interactive():
             raise click.UsageError("give a FILENAME or pipe code through stdin")
-        code = click.get_text_stream("stdin").read()
+        code = sys.stdin.read()
     else:
         try:
             with open(code_file, encoding="utf-8") as handle:
