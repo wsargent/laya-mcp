@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
+import laya_mcp.cli as cli_mod
 import laya_mcp.server as server
 
 EXECUTE_FANOUT = '''
@@ -78,3 +80,26 @@ async def test_stdio_default_surface_unchanged() -> None:
         "laya_email",
     }
     assert "execute" not in names
+
+
+@pytest.mark.integration
+def test_cli_stdio_exec_end_to_end(tmp_path) -> None:
+    """`laya-cli --stdio exec FILE` runs a real fan-out through Code Mode.
+
+    Run as a real subprocess: CliRunner replaces stdin with a BytesIO, which
+    breaks anyio's stdio transport (no fileno()).
+    """
+    import subprocess
+
+    code_file = tmp_path / "fanout.py"
+    code_file.write_text(EXECUTE_FANOUT)
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "laya_mcp.cli", "--stdio", "exec", str(code_file)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {"intent": "refund"}

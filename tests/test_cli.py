@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -168,3 +169,102 @@ def test_connection_failure_is_a_click_error(
     result = runner.invoke(cli_mod.main, ["--url", "http://127.0.0.1:9/mcp", "ping"])
     assert result.exit_code != 0
     assert "laya-daemon" in result.output
+
+
+# ---------------------------------------------------------------------------
+# exec: Code Mode driver
+# ---------------------------------------------------------------------------
+
+
+class _RecordingClient:
+    """Minimal async client capturing call_tool invocations."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def __aenter__(self) -> _RecordingClient:
+        return self
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        return None
+
+    async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+        self.calls.append((name, args))
+        return SimpleNamespace(data={"executed": True})
+
+
+@pytest.fixture
+def recording_exec(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Point the CLI's client factory at a recording fake client."""
+    client = _RecordingClient()
+    factory_kwargs: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> Any:
+        factory_kwargs.update(kwargs)
+        return client
+
+    monkeypatch.setattr(cli_mod, "_make_client", factory)
+    return SimpleNamespace(client=client, factory_kwargs=factory_kwargs)
+
+
+def test_exec_reads_filename(runner: CliRunner, recording_exec: Any, tmp_path: Any) -> None:
+    code_file = tmp_path / "sweep.py"
+    code = 'return await call_tool("laya_triage", {"message": "hi"})\n'
+    code_file.write_text(code)
+
+    result = runner.invoke(cli_mod.main, ["exec", str(code_file)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {"executed": True}
+    assert recording_exec.client.calls == [("execute", {"code": code})]
+
+
+def test_exec_reads_heredoc_stdin(runner: CliRunner, recording_exec: Any) -> None:
+    result = runner.invoke(cli_mod.main, ["exec"], input="return 1 + 1\n")
+
+    assert result.exit_code == 0, result.output
+    assert recording_exec.client.calls[0] == ("execute", {"code": "return 1 + 1\n"})
+
+
+def test_exec_dash_reads_stdin(runner: CliRunner, recording_exec: Any) -> None:
+    result = runner.invoke(cli_mod.main, ["exec", "-"], input="return 2\n")
+
+    assert result.exit_code == 0, result.output
+    assert recording_exec.client.calls[0][1]["code"] == "return 2\n"
+
+
+def test_exec_interactive_stdin_is_an_error(
+    runner: CliRunner, recording_exec: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli_mod, "_stdin_is_interactive", lambda: True)
+    result = runner.invoke(cli_mod.main, ["exec"])
+
+    assert result.exit_code != 0
+    assert "FILENAME" in result.output
+    assert recording_exec.client.calls == []
+
+
+def test_exec_stdio_enables_code_mode_env(runner: CliRunner, recording_exec: Any) -> None:
+    result = runner.invoke(cli_mod.main, ["--stdio", "exec"], input="return 3\n")
+
+    assert result.exit_code == 0, result.output
+    assert recording_exec.factory_kwargs["stdio_env"] == {
+        "LAYA_MCP_CODE_MODE": "1",
+        "FASTMCP_SHOW_SERVER_BANNER": "0",
+    }
+
+
+def test_stdio_without_exec_gets_no_code_mode_env(
+    runner: CliRunner, fake_agent: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def factory(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return Client(server.mcp)
+
+    monkeypatch.setattr(cli_mod, "_make_client", factory)
+    result = runner.invoke(cli_mod.main, ["--stdio", "ping"])
+
+    assert result.exit_code == 0, result.output
+    assert "stdio_env" not in captured

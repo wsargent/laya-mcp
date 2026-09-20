@@ -101,9 +101,19 @@ laya-cli triage "I was charged twice and need a refund today"
 laya-cli moderate "everyone in this thread is an idiot"
 laya-cli email "invoice attached" --category billing="billing matters"
 laya-cli decide --state '{"pr": "feat!: switch config format"}' --questions-file questions.json
+laya-cli exec sweep.py
+laya-cli exec <<'PY'
+out = []
+for message in ["refund me today", "where is my order?"]:
+    r = await call_tool("laya_triage", {"message": message})
+    out.append(r["answers"]["intent"]["choice"])
+return out
+PY
 ```
 
 `decide` accepts `--state`/`--state-file` and `--questions`/`--questions-file` (exactly one of each); state parses as JSON when it can and stays a plain string otherwise.
+
+`exec` runs a Python snippet through the Code Mode `execute` meta-tool (see below): give a filename, or omit the argument / pass `-` to read the code from stdin, heredoc-style. The target server must run with `LAYA_MCP_CODE_MODE=1`; with `--stdio` the CLI spawns the server with it enabled automatically.
 
 ## Code Mode
 
@@ -118,6 +128,8 @@ return out
 ```
 
 `call_tool` returns each tool's result data directly. `LAYA_CODE_MODE_MAX_CALLS` caps the number of `call_tool()` invocations per execution (default 50); the snippet runs in the built-in Monty sandbox (30 seconds, 100 MB, recursion 1000 by default).
+
+`laya-cli exec` drives the `execute` meta-tool from the shell — a filename argument, or a heredoc on stdin — and with `--stdio` it spawns the server with Code Mode enabled automatically.
 
 Code Mode is opt-in because the meta-tools hide the `laya_*` tools from clients that expect them. It applies to the daemon too, which serves the same app: `LAYA_MCP_CODE_MODE=1 uv run laya-daemon`. The transform lives in `fastmcp.experimental`, so expect the surface to move between FastMCP releases.
 

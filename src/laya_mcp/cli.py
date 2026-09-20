@@ -17,6 +17,11 @@ Examples:
     laya-cli email "invoice attached" --category billing="billing matters"
     laya-cli decide --state '{"pr": "feat!: switch config format"}' \\
         --questions-file questions.json
+    laya-cli exec sweep.py
+    laya-cli exec <<'PY'
+    r = await call_tool("laya_triage", {"message": "refund me today"})
+    return r["answers"]["intent"]["choice"]
+    PY
 """
 
 from __future__ import annotations
@@ -35,15 +40,29 @@ from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 DEFAULT_URL = "http://127.0.0.1:8742/mcp"
 
 
-def _make_client(url: str | None, stdio: bool) -> Client:
+def _make_client(
+    url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None
+) -> Client:
     """Build the fastmcp client for the selected transport.
 
     Patched by tests to return an in-memory client against the server object.
+    ``stdio_env`` carries extra environment for the spawned server — used by
+    ``exec`` to enable Code Mode on a --stdio server.
     """
     if stdio:
-        return Client(StdioTransport(sys.executable, ["-m", "laya_mcp.server"]))
+        return Client(
+            StdioTransport(sys.executable, ["-m", "laya_mcp.server"], env=stdio_env)
+        )
     resolved = url or os.environ.get("LAYA_CLI_URL", "").strip() or DEFAULT_URL
     return Client(StreamableHttpTransport(resolved))
+
+
+def _stdin_is_interactive() -> bool:
+    """True when stdin is a terminal (no heredoc/pipe feeding us code)."""
+    try:
+        return sys.stdin.isatty()
+    except Exception:
+        return False
 
 
 def _run(ctx: click.Context, runner: Callable[[Client], Awaitable[Any]]) -> Any:
@@ -87,7 +106,8 @@ def _parse_state(raw: str) -> Any:
 @click.option(
     "--stdio",
     is_flag=True,
-    help="Spawn a stdio server (python -m laya_mcp.server) instead of HTTP.",
+    help="Spawn a stdio server (python -m laya_mcp.server) instead of HTTP. "
+    "For `exec`, the spawned server runs with LAYA_MCP_CODE_MODE=1.",
 )
 @click.pass_context
 def main(ctx: click.Context, url: str | None, stdio: bool) -> None:
@@ -219,6 +239,61 @@ def decide(
         return result.data
 
     _print(_run(ctx, _call))
+
+
+@main.command(name="exec")
+@click.argument(
+    "code_file",
+    metavar="[FILENAME]",
+    required=False,
+    type=click.Path(dir_okay=False),
+)
+@click.pass_context
+def exec_code(ctx: click.Context, code_file: str | None) -> None:
+    """Run Python through the Code Mode `execute` meta-tool.
+
+    FILENAME is a Python file to run; omit it (or pass -) to read the code
+    from stdin, heredoc-style:
+
+    \b
+        laya-cli exec <<'PY'
+        r = await call_tool("laya_triage", {"message": "refund me today"})
+        return r["answers"]["intent"]["choice"]
+        PY
+
+    The snippet chains `await call_tool(...)` calls server-side and returns
+    one value. The target server must run with LAYA_MCP_CODE_MODE=1; with
+    --stdio the CLI enables it on the spawned server automatically.
+    """
+    if code_file in (None, "-"):
+        if _stdin_is_interactive():
+            raise click.UsageError("give a FILENAME or pipe code through stdin")
+        code = click.get_text_stream("stdin").read()
+    else:
+        try:
+            with open(code_file, encoding="utf-8") as handle:
+                code = handle.read()
+        except OSError as exc:
+            raise click.UsageError(f"cannot read {code_file}: {exc}") from exc
+    # A --stdio server spawned for exec needs Code Mode on; it hides the
+    # laya_* tools, so only this command opts the server into it. The banner
+    # is silenced so stdout stays pure JSON.
+    ctx.obj["stdio_env"] = {
+        "LAYA_MCP_CODE_MODE": "1",
+        "FASTMCP_SHOW_SERVER_BANNER": "0",
+    }
+
+    async def _call(client: Client) -> Any:
+        result = await client.call_tool("execute", {"code": code})
+        return result.data
+
+    try:
+        _print(_run(ctx, _call))
+    except click.ClickException as exc:
+        raise click.ClickException(
+            f"{exc.message}\nFor exec the server must run with "
+            "LAYA_MCP_CODE_MODE=1 (with --stdio this is automatic)."
+        ) from exc
 
 
 if __name__ == "__main__":
