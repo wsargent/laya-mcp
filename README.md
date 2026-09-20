@@ -105,6 +105,22 @@ laya-cli decide --state '{"pr": "feat!: switch config format"}' --questions-file
 
 `decide` accepts `--state`/`--state-file` and `--questions`/`--questions-file` (exactly one of each); state parses as JSON when it can and stays a plain string otherwise.
 
+## Code Mode
+
+Set `LAYA_MCP_CODE_MODE=1` to enable FastMCP's [Code Mode](https://gofastmcp.com/servers/transforms/code-mode) transform: the five tools are replaced by discovery meta-tools (`search`, `get_schema`) plus an `execute` tool that runs a Python snippet server-side. The snippet chains calls with `await call_tool(...)`, so a whole fan-out costs one round-trip instead of one per item:
+
+```python
+out = []
+for message in messages:
+    r = await call_tool("laya_triage", {"message": message})
+    out.append(r["answers"]["intent"]["choice"])
+return out
+```
+
+`call_tool` returns each tool's result data directly. `LAYA_CODE_MODE_MAX_CALLS` caps the number of `call_tool()` invocations per execution (default 50); the snippet runs in the built-in Monty sandbox (30 seconds, 100 MB, recursion 1000 by default).
+
+Code Mode is opt-in because the meta-tools hide the `laya_*` tools from clients that expect them. It applies to the daemon too, which serves the same app: `LAYA_MCP_CODE_MODE=1 uv run laya-daemon`. The transform lives in `fastmcp.experimental`, so expect the surface to move between FastMCP releases.
+
 ## Configuration
 
 The server reads these variables when the module is imported (daemon forwarding variables are read per call).
@@ -116,6 +132,8 @@ The server reads these variables when the module is imported (daemon forwarding 
 | `LAYA_MCP_DEVICE` | library default | Optional device passed to `laya_mlx.load`; an empty value uses the library default |
 | `LAYA_DAEMON_URL` | unset | Daemon base URL; when set, inference is forwarded to its `/predict` endpoint with silent fallback to the local lazy load |
 | `LAYA_DAEMON_TIMEOUT` | `15` | Per-call timeout in seconds for daemon-forwarded inference |
+| `LAYA_MCP_CODE_MODE` | off | `1` enables the Code Mode transform: `laya_*` tools are replaced by `search` / `get_schema` / `execute` meta-tools |
+| `LAYA_CODE_MODE_MAX_CALLS` | `50` | Cap on `call_tool()` invocations per Code Mode execution |
 
 The agent is loaded on the first inference call, not at startup. Errors from model loading or invalid configuration therefore surface on first inference.
 

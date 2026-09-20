@@ -8,6 +8,11 @@ The server defines five tools:
 - ``laya_moderate`` — content moderation (state key ``post``).
 - ``laya_email``    — inbound email triage (state key ``body``).
 
+Setting ``LAYA_MCP_CODE_MODE=1`` swaps this surface for FastMCP's Code Mode
+transform: clients get discovery/execute meta-tools and ship one Python
+snippet that chains ``await call_tool(...)`` server-side, instead of making
+many round-trips.
+
 When ``LAYA_DAEMON_URL`` points at a running :mod:`laya_mcp.daemon`, inference
 is forwarded there so every process shares one warm model; otherwise the MLX
 agent is loaded lazily on first inference in this process (never at import
@@ -33,7 +38,35 @@ DTYPE: str = os.environ.get("LAYA_MCP_DTYPE", "float16")
 _DEVICE_ENV: str = os.environ.get("LAYA_MCP_DEVICE", "").strip()
 DEVICE: str | None = _DEVICE_ENV or None
 
-mcp = FastMCP("laya")
+
+def _env_flag(name: str) -> bool:
+    """Parse a boolean-ish environment variable."""
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Code Mode is opt-in: it replaces the five-tool surface with discovery and
+# execute meta-tools, which would break clients expecting the laya_* tools.
+CODE_MODE: bool = _env_flag("LAYA_MCP_CODE_MODE")
+CODE_MODE_MAX_CALLS: int = int(os.environ.get("LAYA_CODE_MODE_MAX_CALLS", "50"))
+
+
+def _make_mcp() -> FastMCP:
+    """Build the server app, applying the Code Mode transform when enabled.
+
+    With ``LAYA_MCP_CODE_MODE`` set, a client sends one Python snippet to the
+    ``execute`` meta-tool; the snippet chains ``await call_tool(...)`` calls
+    server-side (sandboxed, capped by ``LAYA_CODE_MODE_MAX_CALLS``), so a
+    whole fan-out costs a single round-trip.
+    """
+    transforms: list[Any] = []
+    if CODE_MODE:
+        from fastmcp.experimental.transforms.code_mode import CodeMode
+
+        transforms.append(CodeMode(max_tool_calls=CODE_MODE_MAX_CALLS))
+    return FastMCP("laya", transforms=transforms or None)
+
+
+mcp = _make_mcp()
 
 # ---------------------------------------------------------------------------
 # Agent management
