@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
@@ -17,7 +18,8 @@ VALID_QUESTIONS = {"q": {"type": "noul", "instructions": "Is `state` about X?"}}
 @pytest.fixture
 def daemon_client(fake_agent: FakeAgent) -> Any:
     """TestClient against the daemon HTTP surface with a FakeAgent installed."""
-    app = daemon_mod.mcp.http_app()
+    # Importing laya_mcp.daemon attaches the routes to the shared server app.
+    app = server.mcp.http_app()
     client = TestClient(app)
     yield client, fake_agent
 
@@ -173,3 +175,14 @@ def test_predict_falls_back_to_local_when_daemon_unreachable(
 
     assert result is fake_agent.result
     assert len(fake_agent.calls) == 1
+
+
+def test_daemon_main_scrubs_forwarding_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The daemon owns its model: ambient LAYA_DAEMON_URL must not survive main()."""
+    monkeypatch.setenv("LAYA_DAEMON_URL", "http://127.0.0.1:9999")
+    monkeypatch.setattr(server, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(server.mcp, "run", lambda **kwargs: None)
+
+    daemon_mod.main()
+
+    assert "LAYA_DAEMON_URL" not in os.environ

@@ -38,14 +38,14 @@ LOG="${LAYA_GUARD_LOG:-/tmp/laya-prompt-guard.log}"
 
 allow() { echo '{"outcome":"accept"}'; exit 0; }
 
-log_json() { # log_json <event> <extra-fields-without-braces>
-  printf '{"ts":"%s","event":"%s",%s}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" >>"$LOG" 2>/dev/null || true
+log_json() { # log_json <event> [extra-json-fields-without-braces]
+  printf '{"ts":"%s","event":"%s"%s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:+,$2}" >>"$LOG" 2>/dev/null || true
 }
 
 PAYLOAD="$(cat)"
 PROMPT="$(printf '%s' "$PAYLOAD" | jq -r '.prompt // .input.prompt // .user_prompt // .text // .message // empty')"
-[ -n "$PROMPT" ] || { log_json "no-prompt-field" '""'; allow; }
+[ -n "$PROMPT" ] || { log_json "no-prompt-field"; allow; }
 
 PROMPT_JSON="$(printf '%s' "$PROMPT" | jq -Rs .)"
 CODE="$(printf 'r = await call_tool("laya_guard", {"prompt": %s})

@@ -76,11 +76,14 @@ def _run(ctx: click.Context, runner: Callable[[Client], Awaitable[Any]]) -> Any:
     try:
         return asyncio.run(_session())
     except Exception as exc:
-        raise click.ClickException(
-            f"{type(exc).__name__}: {exc}\n"
-            "Is the laya daemon running? Start it with: uv run laya-daemon "
-            "(or pass --stdio to spawn a one-off server)."
-        ) from exc
+        if ctx.obj.get("stdio"):
+            hint = "The stdio server failed to start or crashed."
+        else:
+            hint = (
+                "Is the laya daemon running? Start it with: uv run laya-daemon "
+                "(or pass --stdio to spawn a one-off server)."
+            )
+        raise click.ClickException(f"{type(exc).__name__}: {exc}\n{hint}") from exc
 
 
 def _print(data: Any) -> None:
@@ -290,6 +293,8 @@ def exec_code(ctx: click.Context, code_file: str | None) -> None:
     try:
         _print(_run(ctx, _call))
     except click.ClickException as exc:
+        if ctx.obj.get("stdio"):
+            raise  # code mode was enabled automatically on the spawned server
         raise click.ClickException(
             f"{exc.message}\nFor exec the server must run with "
             "LAYA_MCP_CODE_MODE=1 (with --stdio this is automatic)."

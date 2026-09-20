@@ -27,6 +27,7 @@ import os
 import threading
 from typing import Any
 
+import httpx
 from fastmcp import FastMCP
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ def _make_mcp() -> FastMCP:
         from fastmcp.experimental.transforms.code_mode import CodeMode
 
         transforms.append(CodeMode(max_tool_calls=CODE_MODE_MAX_CALLS))
-    return FastMCP("laya", transforms=transforms or None)
+    return FastMCP("laya", transforms=transforms)
 
 
 mcp = _make_mcp()
@@ -128,8 +129,6 @@ def _predict_via_daemon(
     url: str, state: Any, questions: dict[str, Any]
 ) -> dict[str, Any]:
     """POST one inference to a running laya daemon's ``/predict`` endpoint."""
-    import httpx
-
     timeout = float(os.environ.get("LAYA_DAEMON_TIMEOUT", "15"))
     response = httpx.post(
         f"{url.rstrip('/')}/predict",

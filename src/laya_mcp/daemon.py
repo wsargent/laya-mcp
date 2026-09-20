@@ -37,13 +37,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from . import server
-from .server import _load_agent, mcp
 
 HOST: str = os.environ.get("LAYA_DAEMON_HOST", "127.0.0.1")
 PORT: int = int(os.environ.get("LAYA_DAEMON_PORT", "8742"))
 
 
-@mcp.custom_route("/health", methods=["GET"])
+@server.mcp.custom_route("/health", methods=["GET"])
 async def health(_: Request) -> JSONResponse:
     """Readiness: 200 once the model is loaded, 503 before that."""
     if server._agent is None:
@@ -51,7 +50,7 @@ async def health(_: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "model": server.MODEL_ID})
 
 
-@mcp.custom_route("/predict", methods=["POST"])
+@server.mcp.custom_route("/predict", methods=["POST"])
 async def predict(request: Request) -> JSONResponse:
     """Run one typed-decision inference.
 
@@ -84,8 +83,12 @@ async def predict(request: Request) -> JSONResponse:
 
 def main() -> None:
     """Load the model once, then serve MCP and JSON over streamable HTTP."""
-    server._prime_agent(_load_agent())
-    mcp.run(transport="http", host=HOST, port=PORT)
+    # The daemon owns its model. Scrub ambient forwarding config so a
+    # LAYA_DAEMON_URL exported for stdio servers can never make this
+    # daemon forward its own /mcp tool calls to itself.
+    os.environ.pop("LAYA_DAEMON_URL", None)
+    server._prime_agent(server._load_agent())
+    server.mcp.run(transport="http", host=HOST, port=PORT)
 
 
 if __name__ == "__main__":
