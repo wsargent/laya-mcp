@@ -1,38 +1,47 @@
 # laya-mcp
 
-Local MCP server exposing [laya-mlx](https://github.com/mizorewww/laya-mlx)
-typed-decision inference on Apple Silicon (MLX) via
-[fastmcp](https://gofastmcp.com), served over stdio.
+`laya-mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes [laya-mlx](https://github.com/mizorewww/laya-mlx) typed-decision inference through [FastMCP](https://gofastmcp.com) over stdio. Laya is a small decision-head model—not a generative LLM—that answers `choice`, `score`, and `noul` questions about text in one forward pass, with calibrated probabilities. Inference runs locally on the Metal GPU: no input data leaves your machine.
 
-Laya is a small decision-head model (not a generative LLM): it answers typed
-questions — `choice`, `score`, or `noul` — about a text input in a single
-forward pass, with calibrated probabilities. Inference runs locally on the
-Metal GPU; no data leaves the machine.
+## Requirements
+
+- macOS on Apple Silicon
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/)
+
+## Quickstart
+
+```sh
+git clone https://github.com/wsargent/laya-mcp.git
+cd laya-mcp
+uv sync
+uv run laya-mcp
+```
+
+The server communicates over stdio. On the first inference call, it downloads the approximately 3.4 MB `convaiinnovations/laya` checkpoint from Hugging Face into `~/.cache/huggingface`. The model is loaded lazily, so startup and tool listing do not load the checkpoint.
 
 ## Tools
 
-| Tool | Input | Answers |
+| Tool | Input | Questions answered |
 |---|---|---|
-| `laya_decide` | arbitrary `state` + `questions` spec | caller-defined |
-| `laya_triage` | `message` (support ticket) | `intent` (choice), `is_urgent`, `frustration` (score 0–3), `refund_requested`, `churn_risk` (both noul) |
-| `laya_guard` | `prompt` (user prompt screening) | `jailbreak`, `prompt_injection`, `sensitive_data` (noul), `harm_severity` (score 0–3), `topic` (choice) |
-| `laya_moderate` | `post` (content moderation) | `toxic`, `harassment`, `threat`, `spam` (noul), `severity` (score 0–3) |
-| `laya_email` | `body`, optional `categories` (email triage) | `category` (choice), `is_spam`, `is_phishing`, `needs_reply` (noul), `urgency` (score 0–2) |
+| `laya_decide` | `state` (`str`, `dict`, or `list`) and a `questions` spec | Caller-defined questions; each question is `choice`, `score`, or `noul` |
+| `laya_triage` | `message` (`str`) | `intent` (`choice`), `is_urgent` (`noul`), `frustration` (`score`, 0–3), `refund_requested` (`noul`), `churn_risk` (`noul`) |
+| `laya_guard` | `prompt` (`str`) | `jailbreak` (`noul`), `prompt_injection` (`noul`), `sensitive_data` (`noul`), `harm_severity` (`score`, 0–3), `topic` (`choice`) |
+| `laya_moderate` | `post` (`str`) | `toxic` (`noul`), `harassment` (`noul`), `threat` (`noul`), `spam` (`noul`), `severity` (`score`, 0–3) |
+| `laya_email` | `body` (`str`), optional `categories` (`dict[str, str]`) | `category` (`choice`), `is_spam` (`noul`), `is_phishing` (`noul`), `urgency` (`score`, 0–2), `needs_reply` (`noul`) |
 
-### Answer shapes
+### Answer format
 
-Every answer contains `type`, `confidence` (4 decimal places), and
-`action: {"act_probability": float}`. By question type:
+Each tool returns an object with `model`, `answers`, and `usage`. Every entry in `answers` contains:
 
-- **`choice`** — adds `choice` (winning label) and `probabilities`
-  (`{label: probability}`). `criteria` is a dict `{label: description}` or a
-  list of labels.
-- **`score`** — adds `score` (expected zero-based rubric level, e.g. `1.66`
-  on a 0–3 rubric means between levels 1 and 2), `legend`
-  (`{"0": rubric text, ...}`), and `probabilities` (`{"0": p, ...}`).
-  `criteria` is an ordered list of level descriptions, worst to best.
-- **`noul`** — adds `noul` (P(yes); `1.0` = certainly yes). For this type
-  `confidence` is `max(p_yes, 1 - p_yes)`.
+- `type`: the question type (`choice`, `score`, or `noul`)
+- `confidence`: model confidence, represented to four decimal places
+- `action`: an object containing `act_probability` (the auxiliary action-head probability)
+
+The type-specific fields are:
+
+- **`choice`** — `choice` is the winning label, and `probabilities` maps each label to its probability. Its `criteria` is either a `{label: description}` object or a list of labels.
+- **`score`** — `score` is the expected zero-based rubric level (for example, `1.66` on a 0–3 rubric lies between levels 1 and 2); `legend` maps stringified levels to rubric text; and `probabilities` maps stringified levels to probabilities. Its `criteria` is an ordered list from lowest to highest.
+- **`noul`** — `noul` is P(yes), where `1.0` means certainly yes. For this type, `confidence` is `max(p_yes, 1 - p_yes)`. `criteria` is optional and can describe the false and true outcomes.
 
 Example result from `laya_triage`:
 
@@ -65,45 +74,49 @@ Example result from `laya_triage`:
 }
 ```
 
-`laya_decide` accepts any question spec; see its docstring (exposed via MCP
-tool description) for a worked example of each type. For `laya_email`,
-`categories` replaces the default routing choices
-(`billing` / `technical` / `sales` / `security` / `hr` / `other`) as
-`{"label": "description"}`.
+`laya_decide` accepts any question specification. Question instructions refer to input with a backtick placeholder such as `` `message` ``, `` `prompt` ``, `` `post` ``, or `` `body` ``. The preset tools wrap their text argument in the matching state key. For `laya_email`, `categories` replaces the default `billing`, `technical`, `sales`, `security`, `hr`, and `other` routing choices as a `{label: description}` object.
 
-Question instructions reference the input with a backtick placeholder
-(`` `message` ``, `` `prompt` ``, `` `post` ``, `` `body` ``); the preset
-tools wrap the text argument into the matching state key automatically.
+## Configuration
 
-## Environment variables
+The server reads these variables when the module is imported.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `LAYA_MCP_MODEL` | `convaiinnovations/laya` | Hugging Face model id or local path |
-| `LAYA_MCP_DTYPE` | `float16` | Model dtype: `float16`, `bfloat16`, or `float32` |
-| `LAYA_MCP_DEVICE` | library default (`gpu`) | MLX device: `gpu`, `metal`, or `cpu` |
+| `LAYA_MCP_MODEL` | `convaiinnovations/laya` | Model ID or local model path passed to `laya_mlx.load` |
+| `LAYA_MCP_DTYPE` | `float16` | Dtype passed to `laya_mlx.load` |
+| `LAYA_MCP_DEVICE` | library default | Optional device passed to `laya_mlx.load`; an empty value uses the library default |
 
-The checkpoint downloads to the Hugging Face cache (`~/.cache/huggingface`)
-on first load; later starts are instant. Configuration errors (e.g. an
-invalid dtype or device) surface on the first inference call, not at startup,
-because the model loads lazily.
+The agent is loaded on the first inference call, not at startup. Errors from model loading or invalid configuration therefore surface on first inference.
 
-## Development
+## Client registration
 
-```sh
-uv sync                     # install into .venv (Python 3.12)
-uv run pytest               # unit tests (fake agent, no model load)
-uv run pytest -m integration  # real-model tests over stdio (downloads checkpoint on first run)
-uv run laya-mcp             # run the server over stdio
-uv run python -m laya_mcp.server  # same thing
+For an MCP client that accepts a command and argument list, run the server with the Python environment created by uv:
+
+```json
+{
+  "command": "/absolute/path/to/laya-mcp/.venv/bin/python",
+  "args": ["-m", "laya_mcp.server"]
+}
 ```
 
-The agent loads lazily on first inference (not at startup), and inference is
-serialized behind a lock because fastmcp may serve tool calls concurrently.
+### Claude Desktop
 
-## Polytoken registration
+Add the server to `claude_desktop_config.json`:
 
-Add to `mcp_servers:` in `~/.config/polytoken/config.yaml`:
+```json
+{
+  "mcpServers": {
+    "laya": {
+      "command": "/Users/wsargent/work/laya-mcp/.venv/bin/python",
+      "args": ["-m", "laya_mcp.server"]
+    }
+  }
+}
+```
+
+### Polytoken
+
+Add this entry under `mcp_servers:` in `~/.config/polytoken/config.yaml`:
 
 ```yaml
 mcp_servers:
@@ -116,20 +129,18 @@ mcp_servers:
         transport: stdio
 ```
 
-Takes effect in newly started sessions. `default_timeout_seconds: 300`
-covers the cold first-call model load.
+The 300-second timeout covers the cold first-call model load. The configuration takes effect in newly started sessions.
 
-## Claude Desktop registration
+## Development and testing
 
-For future use, the equivalent `claude_desktop_config.json` snippet:
-
-```json
-{
-  "mcpServers": {
-    "laya": {
-      "command": "/Users/wsargent/work/laya-mcp/.venv/bin/python",
-      "args": ["-m", "laya_mcp.server"]
-    }
-  }
-}
+```sh
+uv sync
+uv run pytest                  # unit tests (integration tests are excluded by default)
+uv run pytest -m integration   # real-model integration tests over stdio
 ```
+
+Integration tests use the real model and require network access on the first run to download the checkpoint. The test suite is in `tests/`; unit tests use a fake agent and do not load the model.
+
+## Credits
+
+The upstream model implementation is [laya-mlx](https://github.com/mizorewww/laya-mlx).
