@@ -9,7 +9,6 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
-import laya_mcp.cli as cli_mod
 import laya_mcp.server as server
 
 EXECUTE_FANOUT = '''

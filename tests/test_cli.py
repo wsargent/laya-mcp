@@ -23,8 +23,11 @@ def runner() -> CliRunner:
 @pytest.fixture
 def in_memory(fake_agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the CLI's client factory at the in-memory server object."""
-    monkeypatch.delenv("LAYA_DAEMON_URL", raising=False)
-    monkeypatch.setattr(cli_mod, "_make_client", lambda url, stdio: Client(server.mcp))
+    monkeypatch.setattr(
+        cli_mod,
+        "_make_client",
+        lambda url, stdio, stdio_env=None: Client(server.mcp),
+    )
 
 
 def test_ping(runner: CliRunner, in_memory: None) -> None:
@@ -122,21 +125,48 @@ def test_decide_plain_text_state_stays_string(
     assert fake_agent.calls[0]["state"] == "plain text"
 
 
-def test_decide_requires_exactly_one_state_source(runner: CliRunner, in_memory: None) -> None:
-    result = runner.invoke(cli_mod.main, ["decide", "--state", "x"])
-    assert result.exit_code != 0
-    assert "exactly one" in result.output
-
-
-def test_decide_requires_exactly_one_questions_source(
-    runner: CliRunner, in_memory: None
+def test_decide_rejects_two_state_sources(
+    runner: CliRunner, in_memory: None, tmp_path: Any
 ) -> None:
+    """Two --state sources trip the state check, with questions well-formed."""
+    state_file = tmp_path / "state.txt"
+    state_file.write_text("x")
     result = runner.invoke(
         cli_mod.main,
-        ["decide", "--state", "x", "--state-file", "/dev/null", "--questions", "{}"],
+        [
+            "decide",
+            "--state",
+            "x",
+            "--state-file",
+            str(state_file),
+            "--questions",
+            '{"q": {"type": "noul", "instructions": "?"}}',
+        ],
     )
     assert result.exit_code != 0
-    assert "exactly one" in result.output
+    assert "--state" in result.output
+
+
+def test_decide_rejects_two_questions_sources(
+    runner: CliRunner, in_memory: None, tmp_path: Any
+) -> None:
+    """Two --questions sources trip the questions check, with state well-formed."""
+    questions_file = tmp_path / "questions.json"
+    questions_file.write_text('{"q": {"type": "noul", "instructions": "?"}}')
+    result = runner.invoke(
+        cli_mod.main,
+        [
+            "decide",
+            "--state",
+            "x",
+            "--questions",
+            '{"q": {"type": "noul", "instructions": "?"}}',
+            "--questions-file",
+            str(questions_file),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--questions" in result.output
 
 
 def test_decide_rejects_non_object_questions(runner: CliRunner, in_memory: None) -> None:
