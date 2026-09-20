@@ -49,9 +49,12 @@ known-first-party = ["laya_mcp"]
 
 [tool.pyright]
 include = ["src", "tests"]
+extraPaths = ["src", "tests"]
+stubPath = "typings"
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
+typeCheckingMode = "strict"
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]

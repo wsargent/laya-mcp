@@ -9,6 +9,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
 import laya_mcp.server as server
+from conftest import FakeAgent
 
 EXPECTED_TOOLS = {
     "laya_decide",
@@ -28,7 +29,7 @@ async def test_list_tools_in_memory() -> None:
     assert {tool.name for tool in tools} == EXPECTED_TOOLS
 
 
-async def test_call_tool_in_memory_uses_fake_agent(fake_agent) -> None:  # type: ignore[no-untyped-def]
+async def test_call_tool_in_memory_uses_fake_agent(fake_agent: FakeAgent) -> None:
     async with Client(server.mcp) as client:
         result = await client.call_tool("laya_triage", {"message": TRIAGE_MESSAGE})
 
@@ -36,7 +37,7 @@ async def test_call_tool_in_memory_uses_fake_agent(fake_agent) -> None:  # type:
     assert result.data == fake_agent.result
 
 
-async def test_call_decide_in_memory_roundtrips_typed_args(fake_agent) -> None:  # type: ignore[no-untyped-def]
+async def test_call_decide_in_memory_roundtrips_typed_args(fake_agent: FakeAgent) -> None:
     """laya_decide's dict-typed state and questions survive MCP schema validation."""
     state = {"ticket": "the server is down"}
     questions = {

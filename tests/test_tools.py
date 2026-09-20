@@ -1,5 +1,7 @@
 """Unit tests for tool wiring: state-key mapping and pass-through, no MLX model."""
 
+# White-box tests: the lock-holding tests exercise the server's private lock.
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 import threading

@@ -37,10 +37,14 @@ import click
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 
+# fastmcp's Client is generic over its transport; the CLI never depends on a
+# concrete transport type, so annotations use this fully-typed alias.
+McpClient = Client[Any]
+
 DEFAULT_URL = "http://127.0.0.1:8742/mcp"
 
 
-def _make_client(url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None) -> Client:
+def _make_client(url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None) -> McpClient:
     """Build the fastmcp client for the selected transport.
 
     Patched by tests to return an in-memory client against the server object.
@@ -61,7 +65,7 @@ def _stdin_is_interactive() -> bool:
         return False
 
 
-def _run(ctx: click.Context, runner: Callable[[Client], Awaitable[Any]]) -> Any:
+def _run(ctx: click.Context, runner: Callable[[McpClient], Awaitable[Any]]) -> Any:
     """Open a client session, await ``runner(client)``, return its result."""
     client = _make_client(**ctx.obj)
 
@@ -117,7 +121,7 @@ def main(ctx: click.Context, url: str | None, stdio: bool) -> None:
 def ping(ctx: click.Context) -> None:
     """Check that the MCP server responds (round-trips a tool listing)."""
 
-    async def _ping(client: Client) -> Any:
+    async def _ping(client: McpClient) -> Any:
         tools = await client.list_tools()
         return [tool.name for tool in tools]
 
@@ -131,7 +135,7 @@ def ping(ctx: click.Context) -> None:
 def guard(ctx: click.Context, prompt: str) -> None:
     """Screen PROMPT for safety risks (laya_guard)."""
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         result = await client.call_tool("laya_guard", {"prompt": prompt})
         return result.data
 
@@ -144,7 +148,7 @@ def guard(ctx: click.Context, prompt: str) -> None:
 def triage(ctx: click.Context, message: str) -> None:
     """Triage support MESSAGE (laya_triage)."""
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         result = await client.call_tool("laya_triage", {"message": message})
         return result.data
 
@@ -157,7 +161,7 @@ def triage(ctx: click.Context, message: str) -> None:
 def moderate(ctx: click.Context, post: str) -> None:
     """Moderate POST for rule-breaking content (laya_moderate)."""
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         result = await client.call_tool("laya_moderate", {"post": post})
         return result.data
 
@@ -183,7 +187,7 @@ def email(ctx: click.Context, body: str, category_pairs: tuple[str, ...]) -> Non
             raise click.UsageError(f"--category expects LABEL=DESC, got {pair!r}")
         categories[label] = description
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         arguments: dict[str, Any] = {"body": body}
         if categories:
             arguments["categories"] = categories
@@ -229,7 +233,7 @@ def decide(
 
     parsed_state = _parse_state(raw_state)
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         result = await client.call_tool("laya_decide", {"state": parsed_state, "questions": parsed_questions})
         return result.data
 
@@ -278,7 +282,7 @@ def exec_code(ctx: click.Context, code_file: str | None) -> None:
         "FASTMCP_SHOW_SERVER_BANNER": "0",
     }
 
-    async def _call(client: Client) -> Any:
+    async def _call(client: McpClient) -> Any:
         result = await client.call_tool("execute", {"code": code})
         return result.data
 

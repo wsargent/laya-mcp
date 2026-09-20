@@ -16,6 +16,20 @@ import laya_mcp.cli as cli_mod
 import laya_mcp.server as server
 
 
+def _fake_in_memory_client(
+    url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None
+) -> cli_mod.McpClient:
+    """Stand-in for _make_client: in-memory client against the server object."""
+    return Client(server.mcp)
+
+
+def _refused_client(
+    url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None
+) -> cli_mod.McpClient:
+    """Stand-in for _make_client: transport pointed at a port nothing listens on."""
+    return Client(StreamableHttpTransport("http://127.0.0.1:9/mcp"))
+
+
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
@@ -24,11 +38,7 @@ def runner() -> CliRunner:
 @pytest.fixture
 def in_memory(fake_agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the CLI's client factory at the in-memory server object."""
-    monkeypatch.setattr(
-        cli_mod,
-        "_make_client",
-        lambda url, stdio, stdio_env=None: Client(server.mcp),
-    )
+    monkeypatch.setattr(cli_mod, "_make_client", _fake_in_memory_client)
 
 
 def test_ping(runner: CliRunner, in_memory: None) -> None:
@@ -281,11 +291,7 @@ def test_stdio_without_exec_gets_no_code_mode_env(
 
 def test_stdio_exec_failure_advice(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     """--stdio exec failures surface the stdio hint, never daemon/code-mode advice."""
-    monkeypatch.setattr(
-        cli_mod,
-        "_make_client",
-        lambda url, stdio, stdio_env=None: Client(StreamableHttpTransport("http://127.0.0.1:9/mcp")),
-    )
+    monkeypatch.setattr(cli_mod, "_make_client", _refused_client)
     result = runner.invoke(cli_mod.main, ["--stdio", "exec"], input="return 1\n")
 
     assert result.exit_code != 0

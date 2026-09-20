@@ -1,5 +1,7 @@
 """Unit tests for the daemon HTTP surface and the server's daemon fallback."""
 
+# White-box tests: they exercise the server's private agent/lock state.
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 from typing import Any
@@ -18,7 +20,7 @@ VALID_QUESTIONS = {"q": {"type": "noul", "instructions": "Is `state` about X?"}}
 def daemon_client(fake_agent: FakeAgent) -> Any:
     """TestClient against the daemon HTTP surface with a FakeAgent installed."""
     # Importing laya_mcp.daemon attaches the routes to the shared server app.
-    import laya_mcp.daemon  # noqa: F401 — imported for its side effect
+    import laya_mcp.daemon  # noqa: F401  # pyright: ignore[reportUnusedImport] — side-effect import
 
     app = server.mcp.http_app()
     client = TestClient(app)

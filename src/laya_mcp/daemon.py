@@ -27,10 +27,13 @@ never attaches them. Configuration (read at import):
   selection, shared with :mod:`laya_mcp.server`.
 """
 
+# White-box by design: the daemon is the wiring module for the shared server
+# app and deliberately touches the server's private agent state.
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -65,6 +68,7 @@ async def predict(request: Request) -> JSONResponse:
         return JSONResponse({"error": "body must be valid JSON"}, status_code=400)
     if not isinstance(body, dict) or "state" not in body:
         return JSONResponse({"error": "'state' is required"}, status_code=400)
+    body = cast("dict[str, Any]", body)
     questions = body.get("questions")
     if not isinstance(questions, dict) or not questions:
         return JSONResponse({"error": "'questions' must be a non-empty object"}, status_code=400)

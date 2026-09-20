@@ -108,7 +108,7 @@ def _get_agent() -> Any:
     return _agent
 
 
-def _prime_agent(agent: Any) -> None:
+def _prime_agent(agent: Any) -> None:  # pyright: ignore[reportUnusedFunction]  # used as server._prime_agent by daemon.py and tests
     """Install an already-loaded agent, bypassing lazy loading (daemon use).
 
     Priming also marks the process as owning its model: from then on

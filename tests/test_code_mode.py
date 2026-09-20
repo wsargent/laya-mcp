@@ -1,9 +1,13 @@
 """Tests for the Code Mode transform wiring (LAYA_MCP_CODE_MODE)."""
 
+# White-box tests: they read the server's private env-flag helper directly.
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import pytest
 from fastmcp import Client
@@ -80,7 +84,7 @@ async def test_stdio_default_surface_unchanged() -> None:
 
 
 @pytest.mark.integration
-def test_cli_stdio_exec_end_to_end(tmp_path) -> None:
+def test_cli_stdio_exec_end_to_end(tmp_path: Path) -> None:
     """`laya-cli --stdio exec FILE` runs a real fan-out through Code Mode.
 
     Run as a real subprocess: CliRunner replaces stdin with a BytesIO, which
