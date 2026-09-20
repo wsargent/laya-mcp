@@ -238,6 +238,38 @@ LAYA_DAEMON_PORT=8743 LAYA_MCP_CODE_MODE=1 uv run laya-daemon
 
 `scripts/laya_log_payloads.sh` appends raw event payloads to `$POLYTOKEN_PAYLOAD_LOG` (default `/tmp/polytoken-payloads.log`) so new hooks can be written against real field names. It emits no decision — exit 0 with no output is the proceed outcome for blocking events and is discarded for fire-and-forget ones — so attaching it never changes behavior. This repo registers it for `stop` and `post_model_turn`.
 
+## Polytoken tool_flow
+
+Polytoken's `tool_flow` tool drives laya directly from agent-side scripts: list the MCP tools by registry name in the flow's `tools` array (for example `mcp__laya__laya_decide`) and call them as ordinary functions. Results arrive as parsed dicts, with scores under `["answers"]`. Two patterns pay off:
+
+**Fan-out** — N classifications in one tool call instead of N round-trips (this is the sweep that tuned the shell gate's threshold):
+
+```python
+QUESTIONS = {"destructive": {"type": "noul",
+    "instructions": "Is `command` destructive, irreversible, or unsafe to run without human review?",
+    "criteria": {"false": "read-only or safely reversible", "true": "deletes data, rewrites history, or mutates system state"}}}
+rows = [
+    (cmd, mcp__laya__laya_decide(state={"command": cmd}, questions=QUESTIONS)
+         ["answers"]["destructive"]["noul"])
+    for cmd in commands
+]
+[cmd for cmd, p in rows if p >= 0.5]
+```
+
+**Dependent chain** — a cheap laya decision gates an expensive call inside one flow, with no model round-trip in between:
+
+```python
+pyproject = file_read(path="pyproject.toml")
+p = mcp__laya__laya_decide(
+    state={"file": pyproject},
+    questions={"uses_fastmcp": {"type": "noul",
+        "instructions": "Does `file` declare a dependency on fastmcp?"}},
+)["answers"]["uses_fastmcp"]["noul"]
+grep(pattern="fastmcp", path="src") if p >= 0.5 else None
+```
+
+Scores are question-spec-specific: a threshold like the shell gate's 0.5 holds for that exact spec, not for reworded questions. Code Mode (`laya-cli exec`) is the server-side sibling of this pattern for clients that are not Polytoken.
+
 ## Development and testing
 
 ```sh
