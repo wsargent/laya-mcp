@@ -1,0 +1,10 @@
+[
+  {
+    "name": "laya-shell-gate",
+    "event": "pre_tool_use",
+    "matcher": "shell_exec",
+    "handler": {
+      "bash": "LAYA_DAEMON_URL=http://127.0.0.1:8742 /Users/wsargent/work/laya-mcp/scripts/laya_shell_gate.sh"
+    }
+  }
+]

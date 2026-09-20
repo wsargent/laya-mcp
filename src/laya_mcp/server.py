@@ -8,9 +8,12 @@ The server defines five tools:
 - ``laya_moderate`` — content moderation (state key ``post``).
 - ``laya_email``    — inbound email triage (state key ``body``).
 
-The MLX agent is loaded lazily on first inference (never at import time), so
-server startup and tool listing are instant. Inference is single-flight via a
-module-level lock because ``Agent.predict`` is not documented as thread-safe.
+When ``LAYA_DAEMON_URL`` points at a running :mod:`laya_mcp.daemon`, inference
+is forwarded there so every process shares one warm model; otherwise the MLX
+agent is loaded lazily on first inference in this process (never at import
+time), so server startup and tool listing are instant. Inference is
+single-flight via a module-level lock because ``Agent.predict`` is not
+documented as thread-safe.
 """
 
 from __future__ import annotations
@@ -66,14 +69,61 @@ def _get_agent() -> Any:
     return _agent
 
 
-def _predict(state: Any, questions: dict[str, Any]) -> dict[str, Any]:
-    """Run one inference against the shared agent, serialized by lock.
+def _prime_agent(agent: Any) -> None:
+    """Install an already-loaded agent, bypassing lazy loading (daemon use)."""
+    global _agent
+    with _agent_lock:
+        _agent = agent
 
-    All tools route through this helper: fastmcp may serve tool calls
-    concurrently and ``Agent.predict`` shares mutable model state.
-    """
+
+def _predict_local(state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+    """Run one inference against the local agent, serialized by lock."""
     with _inference_lock:
         return _get_agent().predict(state, questions)
+
+
+def _daemon_url() -> str | None:
+    """Return the daemon base URL when configured, else ``None``.
+
+    Read per call rather than at import so tests and embedders can point the
+    server at a daemon with an environment variable, no reload required.
+    """
+    return os.environ.get("LAYA_DAEMON_URL", "").strip() or None
+
+
+def _predict_via_daemon(
+    url: str, state: Any, questions: dict[str, Any]
+) -> dict[str, Any]:
+    """POST one inference to a running laya daemon's ``/predict`` endpoint."""
+    import httpx
+
+    timeout = float(os.environ.get("LAYA_DAEMON_TIMEOUT", "15"))
+    response = httpx.post(
+        f"{url.rstrip('/')}/predict",
+        json={"state": state, "questions": questions},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    result: dict[str, Any] = response.json()
+    return result
+
+
+def _predict(state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+    """Run one inference, daemon-first.
+
+    All tools route through this helper. When ``LAYA_DAEMON_URL`` is set and
+    the daemon answers, the call is forwarded there so all processes share one
+    warm model; if the daemon is unreachable or errors, this silently falls
+    back to the local lazy-loaded agent (paying one cold load), keeping the
+    tools available while the daemon is down.
+    """
+    url = _daemon_url()
+    if url is not None:
+        try:
+            return _predict_via_daemon(url, state, questions)
+        except Exception:
+            pass  # daemon down or unhealthy: fall back to the local model
+    return _predict_local(state, questions)
 
 
 # ---------------------------------------------------------------------------
