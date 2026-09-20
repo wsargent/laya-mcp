@@ -42,19 +42,19 @@ Example result from `laya_triage`:
   "answers": {
     "intent": {
       "type": "choice",
-      "confidence": 0.9996,
+      "confidence": 0.9991,
       "action": {"act_probability": 1.0},
       "choice": "refund",
-      "probabilities": {"refund": 0.9988, "technical_help": 0.0, "...": 0.0}
+      "probabilities": {"refund": 0.9998, "technical_help": 0.0, "...": 0.0}
     },
     "is_urgent": {
       "type": "noul",
-      "confidence": 0.7646,
+      "confidence": 0.5912,
       "action": {"act_probability": 1.0},
-      "noul": 0.2354
+      "noul": 0.4088
     }
   },
-  "usage": {"input_tokens": 389, "output_tokens": 0}
+  "usage": {"input_tokens": 369, "output_tokens": 0}
 }
 ```
 
@@ -73,7 +73,7 @@ tools wrap the text argument into the matching state key automatically.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LAYA_MCP_MODEL` | `convaiinnovations/laya` | Hugging Face model id or local path |
-| `LAYA_MCP_DTYPE` | `float16` | Model dtype (`float16`, `bfloat16`, `float32`) |
+| `LAYA_MCP_DTYPE` | `float16` | Model dtype: `float16`, `bfloat16`, or `float32` |
 | `LAYA_MCP_DEVICE` | library default (`gpu`) | MLX device: `gpu`, `metal`, or `cpu` |
 
 The checkpoint downloads to the Hugging Face cache (`~/.cache/huggingface`)
