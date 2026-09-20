@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
+
+import pytest
 
 from laya_mcp.server import (
     laya_decide,
@@ -112,7 +115,14 @@ def test_decide_accepts_list_state(fake_agent: Any) -> None:
     assert fake_agent.calls[0]["state"] == ["first", "second"]
 
 
-def test_predict_serializes_through_inference_lock(fake_agent: Any) -> None:
+def test_email_rejects_empty_categories(fake_agent: Any) -> None:
+    """An explicit empty dict is a caller bug, not a request for defaults."""
+    with pytest.raises(ValueError):
+        laya_email("body", {})
+    assert fake_agent.calls == []
+
+
+def test_sequential_calls_both_recorded(fake_agent: Any) -> None:
     """Two calls in a row share the same agent and both record calls."""
     laya_triage("one")
     laya_triage("two")
@@ -120,4 +130,39 @@ def test_predict_serializes_through_inference_lock(fake_agent: Any) -> None:
     assert [call["state"] for call in fake_agent.calls] == [
         {"message": "one"},
         {"message": "two"},
+    ]
+
+
+def test_predict_holds_inference_lock(
+    fake_agent: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tool calls run predict while the module-level inference lock is held."""
+    import laya_mcp.server as server
+
+    original_result = fake_agent.result
+
+    def assert_locked(state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+        assert server._inference_lock.locked(), "predict ran without the inference lock"
+        fake_agent.calls.append({"state": state, "questions": questions})
+        return original_result
+
+    monkeypatch.setattr(fake_agent, "predict", assert_locked)
+    laya_triage("locked call")
+
+    assert len(fake_agent.calls) == 1
+
+
+def test_concurrent_calls_all_recorded(fake_agent: Any) -> None:
+    """Concurrent tool calls serialize on the lock and none are lost."""
+    threads = [
+        threading.Thread(target=laya_triage, args=(f"msg {i}",)) for i in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(fake_agent.calls) == 8
+    assert sorted(call["state"]["message"] for call in fake_agent.calls) == [
+        f"msg {i}" for i in range(8)
     ]

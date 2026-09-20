@@ -90,8 +90,10 @@ def laya_decide(state: str | dict[str, Any] | list[Any], questions: dict[str, An
             prompt, post or email body). Question instructions reference the
             input with a backtick placeholder, so either pass a string or a
             dict whose key matches the placeholder the questions use (for the
-            presets: ``message``, ``prompt``, ``post`` or ``body``). A list is
-            passed through for batch inference.
+            presets: ``message``, ``prompt``, ``post`` or ``body``). A dict or
+            list is serialized to JSON text and embedded in the prompt as-is;
+            exactly one answer per question is returned (there is no
+            per-element batching).
         questions: Question spec: a dict mapping question name to its
             definition. Each definition has ``type`` and ``instructions``, plus
             ``criteria`` depending on type (see below).
@@ -108,7 +110,8 @@ def laya_decide(state: str | dict[str, Any] | list[Any], questions: dict[str, An
        Example: ``{"frustration": {"type": "score", "instructions": "How
        frustrated is the author of `message`?", "criteria": ["calm",
        "annoyed", "angry"]}}``
-    3. ``noul`` — yes/no probability, no criteria.
+    3. ``noul`` — yes/no probability. ``criteria`` is optional; when present
+       it describes the two outcomes: ``{"false": "desc", "true": "desc"}``.
        Example: ``{"is_urgent": {"type": "noul", "instructions": "Does
        `message` communicate a deadline?"}}``
 
@@ -192,6 +195,8 @@ def laya_email(body: str, categories: dict[str, str] | None = None) -> dict[str,
     """
     from laya_mlx import email_questions
 
+    if categories is not None and not categories:
+        raise ValueError("categories, when provided, must be a non-empty dict")
     return _predict({"body": body}, email_questions(categories))
 
 

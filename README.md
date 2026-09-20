@@ -45,7 +45,14 @@ Example result from `laya_triage`:
       "confidence": 0.9991,
       "action": {"act_probability": 1.0},
       "choice": "refund",
-      "probabilities": {"refund": 0.9998, "technical_help": 0.0, "...": 0.0}
+      "probabilities": {
+        "refund": 0.9998,
+        "technical_help": 0.0,
+        "billing_question": 0.0,
+        "information": 0.0,
+        "cancellation": 0.0001,
+        "other": 0.0
+      }
     },
     "is_urgent": {
       "type": "noul",
@@ -77,7 +84,9 @@ tools wrap the text argument into the matching state key automatically.
 | `LAYA_MCP_DEVICE` | library default (`gpu`) | MLX device: `gpu`, `metal`, or `cpu` |
 
 The checkpoint downloads to the Hugging Face cache (`~/.cache/huggingface`)
-on first load; later starts are instant.
+on first load; later starts are instant. Configuration errors (e.g. an
+invalid dtype or device) surface on the first inference call, not at startup,
+because the model loads lazily.
 
 ## Development
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import sys
 
 import pytest
 from fastmcp import Client
@@ -39,10 +39,28 @@ async def test_call_tool_in_memory_uses_fake_agent(fake_agent) -> None:  # type:
     assert result.data == fake_agent.result
 
 
+async def test_call_decide_in_memory_roundtrips_typed_args(fake_agent) -> None:  # type: ignore[no-untyped-def]
+    """laya_decide's dict-typed state and questions survive MCP schema validation."""
+    state = {"ticket": "the server is down"}
+    questions = {
+        "escalate": {
+            "type": "noul",
+            "instructions": "Should `ticket` be escalated?",
+        }
+    }
+
+    async with Client(server.mcp) as client:
+        result = await client.call_tool(
+            "laya_decide", {"state": state, "questions": questions}
+        )
+
+    assert fake_agent.calls[0] == {"state": state, "questions": questions}
+    assert result.data == fake_agent.result
+
+
 @pytest.mark.integration
 async def test_stdio_server_lists_tools_and_answers() -> None:
-    python = str(Path(__file__).resolve().parents[1] / ".venv" / "bin" / "python")
-    transport = StdioTransport(command=python, args=["-m", "laya_mcp.server"])
+    transport = StdioTransport(command=sys.executable, args=["-m", "laya_mcp.server"])
 
     async with Client(transport) as client:
         tools = await client.list_tools()

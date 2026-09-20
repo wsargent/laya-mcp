@@ -36,6 +36,8 @@ class FakeAgent:
 def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
     """Patch the server so every tool call routes to a FakeAgent."""
     agent = FakeAgent()
+    # _predict routes through _get_agent(); patching the _agent cache too keeps
+    # any direct cache readers (e.g. future code) consistent with the fake.
     monkeypatch.setattr(server, "_get_agent", lambda: agent)
     monkeypatch.setattr(server, "_agent", agent)
     return agent
