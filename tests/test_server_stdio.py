@@ -18,10 +18,7 @@ EXPECTED_TOOLS = {
     "laya_email",
 }
 
-TRIAGE_MESSAGE = (
-    "I was charged twice this month and need a refund today "
-    "or I am cancelling my account."
-)
+TRIAGE_MESSAGE = "I was charged twice this month and need a refund today or I am cancelling my account."
 
 
 async def test_list_tools_in_memory() -> None:
@@ -50,9 +47,7 @@ async def test_call_decide_in_memory_roundtrips_typed_args(fake_agent) -> None: 
     }
 
     async with Client(server.mcp) as client:
-        result = await client.call_tool(
-            "laya_decide", {"state": state, "questions": questions}
-        )
+        result = await client.call_tool("laya_decide", {"state": state, "questions": questions})
 
     assert fake_agent.calls[0] == {"state": state, "questions": questions}
     assert result.data == fake_agent.result

@@ -6,6 +6,12 @@ import threading
 from typing import Any
 
 import pytest
+from laya_mlx import (
+    email_questions,
+    guard_questions,
+    moderation_questions,
+    triage_questions,
+)
 
 from laya_mcp.server import (
     laya_decide,
@@ -13,12 +19,6 @@ from laya_mcp.server import (
     laya_guard,
     laya_moderate,
     laya_triage,
-)
-from laya_mlx import (
-    email_questions,
-    guard_questions,
-    moderation_questions,
-    triage_questions,
 )
 
 
@@ -99,8 +99,7 @@ def test_decide_passes_state_and_questions_through(fake_agent: Any) -> None:
 
 
 def test_decide_accepts_plain_string_state(fake_agent: Any) -> None:
-    questions = {"topic": {"type": "choice", "instructions": "Topic of `body`?",
-                           "criteria": ["news", "spam"]}}
+    questions = {"topic": {"type": "choice", "instructions": "Topic of `body`?", "criteria": ["news", "spam"]}}
 
     laya_decide("a plain string state", questions)
 
@@ -133,9 +132,7 @@ def test_sequential_calls_both_recorded(fake_agent: Any) -> None:
     ]
 
 
-def test_predict_holds_inference_lock(
-    fake_agent: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_predict_holds_inference_lock(fake_agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tool calls run predict while the module-level inference lock is held."""
     import laya_mcp.server as server
 
@@ -154,15 +151,11 @@ def test_predict_holds_inference_lock(
 
 def test_concurrent_calls_all_recorded(fake_agent: Any) -> None:
     """Concurrent tool calls serialize on the lock and none are lost."""
-    threads = [
-        threading.Thread(target=laya_triage, args=(f"msg {i}",)) for i in range(8)
-    ]
+    threads = [threading.Thread(target=laya_triage, args=(f"msg {i}",)) for i in range(8)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
 
     assert len(fake_agent.calls) == 8
-    assert sorted(call["state"]["message"] for call in fake_agent.calls) == [
-        f"msg {i}" for i in range(8)
-    ]
+    assert sorted(call["state"]["message"] for call in fake_agent.calls) == [f"msg {i}" for i in range(8)]

@@ -40,9 +40,7 @@ from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 DEFAULT_URL = "http://127.0.0.1:8742/mcp"
 
 
-def _make_client(
-    url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None
-) -> Client:
+def _make_client(url: str | None, stdio: bool, stdio_env: dict[str, str] | None = None) -> Client:
     """Build the fastmcp client for the selected transport.
 
     Patched by tests to return an in-memory client against the server object.
@@ -50,9 +48,7 @@ def _make_client(
     ``exec`` to enable Code Mode on a --stdio server.
     """
     if stdio:
-        return Client(
-            StdioTransport(sys.executable, ["-m", "laya_mcp.server"], env=stdio_env)
-        )
+        return Client(StdioTransport(sys.executable, ["-m", "laya_mcp.server"], env=stdio_env))
     resolved = url or os.environ.get("LAYA_CLI_URL", "").strip() or DEFAULT_URL
     return Client(StreamableHttpTransport(resolved))
 
@@ -102,9 +98,7 @@ def _parse_state(raw: str) -> Any:
 @click.option(
     "--url",
     default=None,
-    help="MCP streamable-HTTP URL. Defaults to $LAYA_CLI_URL or "
-    + DEFAULT_URL
-    + " (the daemon).",
+    help="MCP streamable-HTTP URL. Defaults to $LAYA_CLI_URL or " + DEFAULT_URL + " (the daemon).",
 )
 @click.option(
     "--stdio",
@@ -236,9 +230,7 @@ def decide(
     parsed_state = _parse_state(raw_state)
 
     async def _call(client: Client) -> Any:
-        result = await client.call_tool(
-            "laya_decide", {"state": parsed_state, "questions": parsed_questions}
-        )
+        result = await client.call_tool("laya_decide", {"state": parsed_state, "questions": parsed_questions})
         return result.data
 
     _print(_run(ctx, _call))
@@ -296,8 +288,7 @@ def exec_code(ctx: click.Context, code_file: str | None) -> None:
         if ctx.obj.get("stdio"):
             raise  # code mode was enabled automatically on the spawned server
         raise click.ClickException(
-            f"{exc.message}\nFor exec the server must run with "
-            "LAYA_MCP_CODE_MODE=1 (with --stdio this is automatic)."
+            f"{exc.message}\nFor exec the server must run with LAYA_MCP_CODE_MODE=1 (with --stdio this is automatic)."
         ) from exc
 
 

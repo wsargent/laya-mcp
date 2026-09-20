@@ -11,10 +11,10 @@ from fastmcp.client.transports import StdioTransport
 
 import laya_mcp.server as server
 
-EXECUTE_FANOUT = '''
+EXECUTE_FANOUT = """
 r = await call_tool("laya_triage", {"message": "I was charged twice, refund me today"})
 return {"intent": r["answers"]["intent"]["choice"]}
-'''
+"""
 
 
 @pytest.mark.parametrize(
@@ -30,9 +30,7 @@ return {"intent": r["answers"]["intent"]["choice"]}
         ("off", False),
     ],
 )
-def test_env_flag_parsing(
-    monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
-) -> None:
+def test_env_flag_parsing(monkeypatch: pytest.MonkeyPatch, value: str, expected: bool) -> None:
     monkeypatch.setenv("LAYA_TEST_FLAG", value)
     assert server._env_flag("LAYA_TEST_FLAG") is expected
 

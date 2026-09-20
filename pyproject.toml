@@ -27,6 +27,26 @@ markers = [
 addopts = "-m 'not integration'"
 asyncio_mode = "auto"
 
+[tool.ruff]
+line-length = 120
+# target-version is inferred from project.requires-python (>=3.12 -> py312)
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["laya_mcp"]
+
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]
 build-backend = "uv_build"

@@ -140,9 +140,7 @@ def _daemon_url() -> str | None:
     return os.environ.get("LAYA_DAEMON_URL", "").strip() or None
 
 
-def _predict_via_daemon(
-    url: str, state: Any, questions: dict[str, Any]
-) -> dict[str, Any]:
+def _predict_via_daemon(url: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
     """POST one inference to a running laya daemon's ``/predict`` endpoint."""
     timeout = float(os.environ.get("LAYA_DAEMON_TIMEOUT", "15"))
     response = httpx.post(

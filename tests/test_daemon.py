@@ -5,12 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from laya_mlx import triage_questions
 from starlette.testclient import TestClient
 
-import laya_mcp.daemon as daemon_mod
 import laya_mcp.server as server
 from conftest import FakeAgent
-from laya_mlx import triage_questions
 
 VALID_QUESTIONS = {"q": {"type": "noul", "instructions": "Is `state` about X?"}}
 
@@ -19,6 +18,8 @@ VALID_QUESTIONS = {"q": {"type": "noul", "instructions": "Is `state` about X?"}}
 def daemon_client(fake_agent: FakeAgent) -> Any:
     """TestClient against the daemon HTTP surface with a FakeAgent installed."""
     # Importing laya_mcp.daemon attaches the routes to the shared server app.
+    import laya_mcp.daemon  # noqa: F401 — imported for its side effect
+
     app = server.mcp.http_app()
     client = TestClient(app)
     yield client, fake_agent
@@ -33,9 +34,7 @@ def test_health_ok_when_loaded(daemon_client: Any) -> None:
     assert body["model"] == server.MODEL_ID
 
 
-def test_health_starting_when_model_not_loaded(
-    daemon_client: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_health_starting_when_model_not_loaded(daemon_client: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     client, _ = daemon_client
     monkeypatch.setattr(server, "_agent", None)
     response = client.get("/health")
@@ -46,9 +45,7 @@ def test_health_starting_when_model_not_loaded(
 def test_predict_passes_state_and_questions_through(daemon_client: Any) -> None:
     client, agent = daemon_client
     state = {"command": "rm -rf /tmp/laya-gate-test"}
-    response = client.post(
-        "/predict", json={"state": state, "questions": VALID_QUESTIONS}
-    )
+    response = client.post("/predict", json={"state": state, "questions": VALID_QUESTIONS})
     assert response.status_code == 200
     assert response.json() == agent.result
     assert agent.calls == [{"state": state, "questions": VALID_QUESTIONS}]
@@ -56,16 +53,12 @@ def test_predict_passes_state_and_questions_through(daemon_client: Any) -> None:
 
 def test_predict_accepts_string_state(daemon_client: Any) -> None:
     client, agent = daemon_client
-    response = client.post(
-        "/predict", json={"state": "plain text", "questions": VALID_QUESTIONS}
-    )
+    response = client.post("/predict", json={"state": "plain text", "questions": VALID_QUESTIONS})
     assert response.status_code == 200
     assert agent.calls[0]["state"] == "plain text"
 
 
-def test_predict_holds_inference_lock(
-    daemon_client: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_predict_holds_inference_lock(daemon_client: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     client, agent = daemon_client
     original_result = agent.result
 
@@ -75,40 +68,29 @@ def test_predict_holds_inference_lock(
         return original_result
 
     monkeypatch.setattr(agent, "predict", assert_locked)
-    response = client.post(
-        "/predict", json={"state": "x", "questions": VALID_QUESTIONS}
-    )
+    response = client.post("/predict", json={"state": "x", "questions": VALID_QUESTIONS})
     assert response.status_code == 200
     assert len(agent.calls) == 1
 
 
-def test_predict_503_when_model_not_loaded(
-    daemon_client: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_predict_503_when_model_not_loaded(daemon_client: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     client, _ = daemon_client
     monkeypatch.setattr(server, "_agent", None)
-    response = client.post(
-        "/predict", json={"state": "x", "questions": VALID_QUESTIONS}
-    )
+    response = client.post("/predict", json={"state": "x", "questions": VALID_QUESTIONS})
     assert response.status_code == 503
 
 
 def test_predict_rejects_bad_bodies(daemon_client: Any) -> None:
     client, _ = daemon_client
     # invalid JSON
-    response = client.post(
-        "/predict", content=b"not json", headers={"content-type": "application/json"}
-    )
+    response = client.post("/predict", content=b"not json", headers={"content-type": "application/json"})
     assert response.status_code == 400
     # missing state
     assert client.post("/predict", json={"questions": VALID_QUESTIONS}).status_code == 400
     # questions missing / empty / not an object
     assert client.post("/predict", json={"state": "x"}).status_code == 400
     assert client.post("/predict", json={"state": "x", "questions": {}}).status_code == 400
-    assert (
-        client.post("/predict", json={"state": "x", "questions": ["q"]}).status_code
-        == 400
-    )
+    assert client.post("/predict", json={"state": "x", "questions": ["q"]}).status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -125,9 +107,7 @@ def test_daemon_url_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     assert server._daemon_url() == "http://127.0.0.1:8742"
 
 
-def test_predict_uses_daemon_when_available(
-    fake_agent: FakeAgent, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_predict_uses_daemon_when_available(fake_agent: FakeAgent, monkeypatch: pytest.MonkeyPatch) -> None:
     canned = {
         "model": "laya-daemon",
         "answers": {"demo": {"type": "noul", "noul": 0.1}},
@@ -150,9 +130,7 @@ def test_predict_uses_daemon_when_available(
     assert fake_agent.calls == []
 
 
-def test_predict_falls_back_when_daemon_errors(
-    fake_agent: FakeAgent, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_predict_falls_back_when_daemon_errors(fake_agent: FakeAgent, monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(url: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("daemon on fire")
 

@@ -67,9 +67,7 @@ async def predict(request: Request) -> JSONResponse:
         return JSONResponse({"error": "'state' is required"}, status_code=400)
     questions = body.get("questions")
     if not isinstance(questions, dict) or not questions:
-        return JSONResponse(
-            {"error": "'questions' must be a non-empty object"}, status_code=400
-        )
+        return JSONResponse({"error": "'questions' must be a non-empty object"}, status_code=400)
     agent = server._agent
     if agent is None:
         return JSONResponse({"error": "model not loaded yet"}, status_code=503)
