@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from click.testing import CliRunner
 from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from laya_mlx import email_questions
 
 import laya_mcp.cli as cli_mod
@@ -298,3 +299,36 @@ def test_stdio_without_exec_gets_no_code_mode_env(
 
     assert result.exit_code == 0, result.output
     assert "stdio_env" not in captured
+
+
+def test_stdio_exec_failure_advice(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--stdio exec failures surface the stdio hint, never daemon/code-mode advice."""
+    monkeypatch.setattr(
+        cli_mod,
+        "_make_client",
+        lambda url, stdio, stdio_env=None: Client(
+            StreamableHttpTransport("http://127.0.0.1:9/mcp")
+        ),
+    )
+    result = runner.invoke(cli_mod.main, ["--stdio", "exec"], input="return 1\n")
+
+    assert result.exit_code != 0
+    assert "stdio server failed" in result.output
+    assert "laya-daemon" not in result.output
+    assert "LAYA_MCP_CODE_MODE" not in result.output
+
+
+def test_http_exec_failure_advice(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP exec failures carry both the daemon hint and the code-mode hint."""
+    monkeypatch.delenv("LAYA_CLI_URL", raising=False)
+    result = runner.invoke(
+        cli_mod.main,
+        ["--url", "http://127.0.0.1:9/mcp", "exec"],
+        input="return 1\n",
+    )
+
+    assert result.exit_code != 0
+    assert "laya-daemon" in result.output
+    assert "LAYA_MCP_CODE_MODE=1" in result.output

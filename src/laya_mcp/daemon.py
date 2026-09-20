@@ -83,10 +83,9 @@ async def predict(request: Request) -> JSONResponse:
 
 def main() -> None:
     """Load the model once, then serve MCP and JSON over streamable HTTP."""
-    # The daemon owns its model. Scrub ambient forwarding config so a
-    # LAYA_DAEMON_URL exported for stdio servers can never make this
-    # daemon forward its own /mcp tool calls to itself.
-    os.environ.pop("LAYA_DAEMON_URL", None)
+    # Priming marks the process as owning its model: _daemon_url then
+    # ignores ambient LAYA_DAEMON_URL, so a variable exported for stdio
+    # servers can never make this daemon forward its own tool calls.
     server._prime_agent(server._load_agent())
     server.mcp.run(transport="http", host=HOST, port=PORT)
 

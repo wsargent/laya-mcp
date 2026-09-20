@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import pytest
@@ -11,6 +10,7 @@ from starlette.testclient import TestClient
 import laya_mcp.daemon as daemon_mod
 import laya_mcp.server as server
 from conftest import FakeAgent
+from laya_mlx import triage_questions
 
 VALID_QUESTIONS = {"q": {"type": "noul", "instructions": "Is `state` about X?"}}
 
@@ -177,12 +177,27 @@ def test_predict_falls_back_to_local_when_daemon_unreachable(
     assert len(fake_agent.calls) == 1
 
 
-def test_daemon_main_scrubs_forwarding_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The daemon owns its model: ambient LAYA_DAEMON_URL must not survive main()."""
-    monkeypatch.setenv("LAYA_DAEMON_URL", "http://127.0.0.1:9999")
-    monkeypatch.setattr(server, "_load_agent", lambda: FakeAgent())
-    monkeypatch.setattr(server.mcp, "run", lambda **kwargs: None)
+def test_primed_process_never_forwards(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A primed process (the daemon) owns its model: ambient forwarding env is ignored.
 
-    daemon_mod.main()
+    This pins the /mcp surface, not just the main() entrypoint: even when the
+    shared app is served without daemon.main(), a primed process must route
+    inference locally no matter what LAYA_DAEMON_URL says.
+    """
+    agent = FakeAgent()
+    monkeypatch.setenv("LAYA_DAEMON_URL", "http://127.0.0.1:9")
 
-    assert "LAYA_DAEMON_URL" not in os.environ
+    def must_not_forward(url: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+        raise AssertionError("primed process attempted to forward inference")
+
+    monkeypatch.setattr(server, "_predict_via_daemon", must_not_forward)
+
+    server._prime_agent(agent)
+    try:
+        result = server.laya_triage("hello")
+    finally:
+        server._daemon_owned = False
+        server._agent = None
+
+    assert result is agent.result
+    assert agent.calls == [{"state": {"message": "hello"}, "questions": triage_questions()}]

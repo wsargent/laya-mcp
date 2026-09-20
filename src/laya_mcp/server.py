@@ -76,6 +76,11 @@ mcp = _make_mcp()
 _agent: Any | None = None
 _agent_lock = threading.Lock()
 _inference_lock = threading.Lock()
+# True once this process has been primed with its own model (the daemon).
+# A process that owns its model must never forward inference elsewhere,
+# regardless of ambient LAYA_DAEMON_URL, so embedding or re-serving the
+# shared app without daemon.main() cannot make it forward to itself.
+_daemon_owned: bool = False
 
 
 def _load_agent() -> Any:
@@ -104,10 +109,16 @@ def _get_agent() -> Any:
 
 
 def _prime_agent(agent: Any) -> None:
-    """Install an already-loaded agent, bypassing lazy loading (daemon use)."""
-    global _agent
+    """Install an already-loaded agent, bypassing lazy loading (daemon use).
+
+    Priming also marks the process as owning its model: from then on
+    ``_daemon_url`` reports no daemon, so the daemon's own tool calls can
+    never be forwarded to itself or elsewhere.
+    """
+    global _agent, _daemon_owned
     with _agent_lock:
         _agent = agent
+        _daemon_owned = True
 
 
 def _predict_local(state: Any, questions: dict[str, Any]) -> dict[str, Any]:
@@ -120,8 +131,12 @@ def _daemon_url() -> str | None:
     """Return the daemon base URL when configured, else ``None``.
 
     Read per call rather than at import so tests and embedders can point the
-    server at a daemon with an environment variable, no reload required.
+    server at a daemon with an environment variable, no reload required —
+    except in a process that has been primed with its own model (the
+    daemon): ownership beats ambient configuration.
     """
+    if _daemon_owned:
+        return None
     return os.environ.get("LAYA_DAEMON_URL", "").strip() or None
 
 
