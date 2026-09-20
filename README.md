@@ -201,7 +201,7 @@ mcp_servers:
         url: http://127.0.0.1:8742/mcp
 ```
 
-## Polytoken hook: gating shell commands
+## Polytoken hooks
 
 `scripts/laya_shell_gate.sh` is a `pre_tool_use` hook for the `shell_exec` tool: it pipes the command text through the daemon's `/predict` endpoint and denies commands laya scores as destructive, so the decision costs one local forward pass instead of an LLM call. It fails open — daemon down or malformed payload means allow — and appends every decision to `$LAYA_GATE_LOG` (default `/tmp/laya-shell-gate.log`) for threshold tuning.
 
@@ -223,6 +223,20 @@ Register it in `.polytoken/hooks.json` (project) or `~/.config/polytoken/hooks.j
 Hooks are loaded when a session starts, so new sessions pick the gate up. Remove the entry to disable it, or blacklist an inherited global hook from a project file with `["!laya-shell-gate"]`.
 
 `LAYA_GATE_THRESHOLD` (default `0.5`) is the deny cut-off for P(destructive), tuned on a 13-command sweep (benign 0.30–0.45, destructive 0.54–0.78 — roughly a 0.05 margin on both sides). Treat the gate as a cheap semantic heuristic, not a security boundary: watch the decision log and adjust the threshold for your own command mix.
+
+### Prompt guard (Code Mode)
+
+`scripts/laya_prompt_guard.sh` is a `pre_user_prompt` hook backed by Code Mode: it ships one Python heredoc to the `execute` meta-tool, running `laya_guard` plus a destructive-request `laya_decide` in a single round-trip, and rejects the prompt when jailbreak or injection probability crosses `LAYA_GUARD_THRESHOLD` (default 0.9). It fails open, logs decisions to `$LAYA_GUARD_LOG` (default `/tmp/laya-prompt-guard.log`, CLI stderr beside it in `.cli`), and defaults to a code-mode daemon at `http://127.0.0.1:8743` (`LAYA_GUARD_URL`). The field of the `pre_user_prompt` payload carrying the prompt text is not documented; the script tries the likely shapes and fails open — check the log after a session.
+
+Run the code-mode daemon alongside the plain one (same warm-model pattern, separate port so `/mcp` surfaces don't conflict):
+
+```sh
+LAYA_DAEMON_PORT=8743 LAYA_MCP_CODE_MODE=1 uv run laya-daemon
+```
+
+### Payload logger
+
+`scripts/laya_log_payloads.sh` appends raw event payloads to `$POLYTOKEN_PAYLOAD_LOG` (default `/tmp/polytoken-payloads.log`) so new hooks can be written against real field names. It emits no decision — exit 0 with no output is the proceed outcome for blocking events and is discarded for fire-and-forget ones — so attaching it never changes behavior. This repo registers it for `stop` and `post_model_turn`.
 
 ## Development and testing
 
