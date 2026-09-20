@@ -1,0 +1,33 @@
+[project]
+name = "laya-mcp"
+version = "0.1.0"
+description = "Local MCP server exposing laya-mlx typed-decision inference via fastmcp"
+readme = "README.md"
+authors = [
+    { name = "Will Sargent", email = "will.sargent@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=4.0.5",
+    "laya-mlx>=0.1.0",
+]
+
+[project.scripts]
+laya-mcp = "laya_mcp.server:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires the real laya checkpoint (network on first run)",
+]
+addopts = "-m 'not integration'"
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
