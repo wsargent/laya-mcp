@@ -1,31 +1,9 @@
 [
   {
-    "name": "laya-shell-gate",
-    "event": "pre_tool_use",
-    "matcher": "shell_exec",
-    "handler": {
-      "bash": "/Users/wsargent/work/laya-mcp/scripts/laya_shell_gate.sh"
-    }
-  },
-  {
     "name": "laya-prompt-guard",
     "event": "pre_user_prompt",
     "handler": {
-      "bash": "/Users/wsargent/work/laya-mcp/scripts/laya_prompt_guard.sh"
-    }
-  },
-  {
-    "name": "laya-log-stop-payload",
-    "event": "stop",
-    "handler": {
-      "bash": "/Users/wsargent/work/laya-mcp/scripts/laya_log_payloads.sh"
-    }
-  },
-  {
-    "name": "laya-log-turn-payload",
-    "event": "post_model_turn",
-    "handler": {
-      "bash": "/Users/wsargent/work/laya-mcp/scripts/laya_log_payloads.sh"
+      "bash": "\"${POLYTOKEN_PROJECT_DIR:-.}/scripts/hooks/laya-prompt-guard.sh\""
     }
   }
 ]
